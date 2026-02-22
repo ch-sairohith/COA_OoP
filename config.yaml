@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────
+# RISC-V Simulator Configuration
+# All simulator behaviour is controlled here — nothing is hardcoded.
+# ─────────────────────────────────────────────────────────────────
+
+# Data memory size in bytes (must be >= 4096)
+memory_size: 4096
+
+# Enable data forwarding (Phase-3 feature; ignored in Phase-1)
+forwarding: false
+
+# Per-instruction latencies in cycles.
+#   Phase-1  : recorded for stats, but every instruction finishes in 1 cycle.
+#   Phase-2+ : Execute stage stalls for (latency - 1) additional cycles.
+instruction_latencies:
+  ADD:  1
+  SUB:  1
+  MUL:  3
+  LW:   2
+  SW:   1
+  BNE:  1
+  JAL:  1
+  ADDI: 1
+  SLTI: 1
+
+# Print all non-zero registers at end of run
+dump_registers: true
+
+# Print first N bytes of data memory (set 0 to skip)
+dump_memory_bytes: 128
