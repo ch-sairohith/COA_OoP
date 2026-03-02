@@ -1,0 +1,10 @@
+{
+  "forwarding_enabled":false,
+  "latencies":{
+    "add":1,
+    "lw":1,
+    "sw":1,
+    "bne":1,
+    "jal":1
+  }
+}
