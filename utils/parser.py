@@ -1,4 +1,5 @@
 from instruction import Instruction
+from data_mem import Memory
 
 def parser(input_file):
 
@@ -7,11 +8,44 @@ def parser(input_file):
     clean_lines = []
     instr_index = 0
     instructions = []
+    memory = Memory()
+    data_label_map = {}
+    mode = None
 
     for single_line in lines:
         line = single_line.split("#")[0].strip()
 
         if not line:
+            continue
+
+        if line == ".data":
+            mode = "data"
+            continue
+
+        if line == ".text":
+            mode = "text"
+            continue
+
+        if mode == "data":
+            label_part, _, rest_part = line.partition(":")
+            label = label_part.strip()
+            rest = rest_part.strip()
+
+            if label:
+                data_label_map[label] = memory.base_address
+            else:
+                raise Exception("Please keep a name to the assigned memory")
+
+            words = rest.replace(",", "").split()
+
+            if words[0] == ".word":
+                for value in words[1:]:
+                    memory.data_section_word(int(value))
+
+            elif words[0] == ".byte":
+                for value in words[1:]:
+                    memory.data_section_byte(int(value))
+
             continue
 
         if ":" in line:
@@ -63,10 +97,23 @@ def parser(input_file):
 
             instr = Instruction(words[0],instr_index*4,rs1=rs1,rs2=rs2,imm=target)
 
+        elif words[0]=="la":
+            rd =int(words[1][1:])
+            label = words[2]
+
+            if label in data_label_map:
+                imm = data_label_map[label]
+            elif label in label_map:
+                imm = label_map[label]
+            else:
+                raise Exception("Label not found")                       
+
+            instr=Instruction(words[0],instr_index*4,rd,imm=imm)
+
         else:
             continue
 
         instructions.append(instr)
         instr_index += 1
 
-    return instructions
+    return instructions,memory
