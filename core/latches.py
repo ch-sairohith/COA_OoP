@@ -19,7 +19,7 @@ class ID_EX_Latch:
   reg_write:bool=False
   mem_read:bool=False
   mem_write:bool=False
-  is_branch:bool=Flase
+  is_branch:bool=False
   @dataclass 
   class EX_MEM_Latch:
     is_nop:bool=True

@@ -1,4 +1,3 @@
-# stages/fetch.py
 
 class FetchStage:
     def __init__(self, inst_mem):
