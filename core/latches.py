@@ -26,6 +26,7 @@ class ID_EX_Latch:
     alu_result:int=0
     rs2_val:int=0
     rd_addr:int=0
+    mem_size:int=0
     reg_write:bool=False
     mem_read:bool=False
     mem_write:bool=False
