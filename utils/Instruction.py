@@ -1,5 +1,3 @@
-
-
 class Instruction:
     def __init__(self,opcode,pc,rd=None,rs1=None,rs2=None,imm=None):
         self.opcode = opcode

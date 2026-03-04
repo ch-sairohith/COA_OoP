@@ -20,24 +20,24 @@ class ID_EX_Latch:
   mem_read:bool=False
   mem_write:bool=False
   is_branch:bool=False
-  @dataclass 
-  class EX_MEM_Latch:
-    is_nop:bool=True
-    alu_result:int=0
-    rs2_val:int=0
-    rd_addr:int=0
-    mem_size:int=0
-    reg_write:bool=False
-    mem_read:bool=False
-    mem_write:bool=False
-  @dataclass
-  class MEM_WB_Latch:
-    is_nop:bool=True
-    alu_result:int=0
-    mem_data:int=0
-    rd_addr:int=0
-    reg_write:bool=False
-    mem_to_reg:bool=False
+@dataclass 
+class EX_MEM_Latch:
+  is_nop:bool=True
+  alu_result:int=0
+  rs2_val:int=0
+  rd_addr:int=0
+  mem_size:int=0
+  reg_write:bool=False
+  mem_read:bool=False
+  mem_write:bool=False
+@dataclass
+class MEM_WB_Latch:
+  is_nop:bool=True
+  alu_result:int=0
+  mem_data:int=0
+  rd_addr:int=0
+  reg_write:bool=False
+  mem_to_reg:bool=False
 
 
 

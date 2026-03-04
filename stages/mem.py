@@ -1,6 +1,6 @@
 from core.latches import MEM_WB_Latch
 
-class Mem_stage:
+class MemStage:
 
     def step(self, ex_mem_latch, stall,memory):
         """

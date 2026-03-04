@@ -1,4 +1,4 @@
-class Writeback:
+class WritebackStage:
 
     def step(self, mem_wb_latch, registers, stall):
 

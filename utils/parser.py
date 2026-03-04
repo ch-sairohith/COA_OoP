@@ -1,5 +1,5 @@
-from instruction import Instruction
-from data_mem import Memory
+from .Instruction import Instruction
+from components.data_mem import Memory
 
 def parser(input_file):
 
@@ -115,5 +115,7 @@ def parser(input_file):
 
         instructions.append(instr)
         instr_index += 1
-
+    print("Parsed Instructions:")
+    for instr in instructions:
+        print(instr.__dict__)
     return instructions,memory
