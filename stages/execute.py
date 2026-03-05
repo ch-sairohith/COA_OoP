@@ -1,5 +1,5 @@
 class ExecuteStage:
-  def step(ID_EX_Latch, EX_MEM_Latch, stall):
+  def step(self,ID_EX_Latch, EX_MEM_Latch, stall):
         """
         Executes one clock cycle of the Execute stage.
         """
@@ -14,8 +14,11 @@ class ExecuteStage:
 
         alu_result = 0
         
-        if instr.opcode in ["add", "addi", "la"]:
-            alu_result = rs1_val + (imm if instr.opcode == "addi" else 0)
+        # ✅ FIX
+        if instr.opcode == "add":
+            alu_result = rs1_val + rs2_val
+        elif instr.opcode in ["addi", "la"]:
+            alu_result = rs1_val + imm
         elif instr.opcode == "sub":
             alu_result = rs1_val - rs2_val
         elif instr.opcode in ["lw", "sw"]:
@@ -32,4 +35,5 @@ class ExecuteStage:
         
         EX_MEM_Latch.mem_read = ID_EX_Latch.mem_read
         EX_MEM_Latch.mem_write = ID_EX_Latch.mem_write
+        EX_MEM_Latch.reg_write = ID_EX_Latch.reg_write
     
