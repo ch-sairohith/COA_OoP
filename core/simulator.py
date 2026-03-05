@@ -33,7 +33,7 @@ class Simulator:
                 break 
             self.writeback_stage.step(self.mem_wb_latch, self.register_file, stall=False)
             
-            self.mem_stage.step(self.ex_mem_latch, self.mem_wb_latch, self.data_mem)
+            self.mem_wb_latch=self.mem_stage.step(self.ex_mem_latch, self.data_mem,stall=False)
             
             self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch)
             
