@@ -2,7 +2,7 @@ from core.latches import MEM_WB_Latch
 
 class MemStage:
 
-    def step(self, ex_mem_latch, stall,memory):
+    def step(self, ex_mem_latch,memory,stall):
         """
         Executes one clock cycle of the Memory stage.
         """
@@ -31,3 +31,4 @@ class MemStage:
 
         
         
+
