@@ -18,6 +18,7 @@ class ExecuteStage:
         if instr.opcode == "add":
             alu_result = rs1_val + rs2_val
         elif instr.opcode in ["addi", "la"]:
+            print(imm)
             alu_result = rs1_val + imm
         elif instr.opcode == "sub":
             alu_result = rs1_val - rs2_val
@@ -32,7 +33,7 @@ class ExecuteStage:
         EX_MEM_Latch.alu_result = alu_result
         EX_MEM_Latch.rd_addr = ID_EX_Latch.rd_addr
         EX_MEM_Latch.rs2_val = rs2_val
-        
+        EX_MEM_Latch.mem_size = 4 if instr.opcode in ["lw", "sw"] else 0
         EX_MEM_Latch.mem_read = ID_EX_Latch.mem_read
         EX_MEM_Latch.mem_write = ID_EX_Latch.mem_write
         EX_MEM_Latch.reg_write = ID_EX_Latch.reg_write

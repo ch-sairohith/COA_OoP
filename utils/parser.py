@@ -18,11 +18,11 @@ def parser(input_file):
         if not line:
             continue
 
-        if line == ".data":
+        if line == ".data:":
             mode = "data"
             continue
 
-        if line == ".text":
+        if line == ".text:":
             mode = "text"
             continue
 
@@ -78,7 +78,7 @@ def parser(input_file):
             offset, reg = words[2].split("(")
             imm = int(offset)
             rs1 = int(reg[:-1][1:])
-
+            print(rs1, imm)
             instr = Instruction(words[0],instr_index*4,rd,rs1,imm=imm)
 
         elif words[0] == "sw":

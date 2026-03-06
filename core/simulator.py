@@ -35,7 +35,7 @@ class Simulator:
             
             self.mem_wb_latch=self.mem_stage.step(self.ex_mem_latch, self.data_mem,stall=False)
             
-            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch)
+            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, stall=False)
             
             self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall=False)
             
