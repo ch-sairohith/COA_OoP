@@ -1,6 +1,8 @@
 from core.latches import IF_ID_Latch, ID_EX_Latch, EX_MEM_Latch, MEM_WB_Latch
 from stages import FetchStage, DecodeStage, ExecuteStage, MemStage, WritebackStage
 from components.register import RegisterFile
+from core.hazard_unit import HazardUnit
+hazard=HazardUnit()
 class Simulator:
     def __init__(self, inst_mem, data_mem):
         self.clock = 0
@@ -31,15 +33,18 @@ class Simulator:
             
             if not instructions_left and pipeline_empty:
                 break 
+            forwardA,forwardB,stall=hazard.detect(self.if_id_latch,self.id_ex_latch,self.ex_mem_latch,self.mem_wb_latch)
+            old_mem_wb_latch=self.mem_wb_latch
+
             self.writeback_stage.step(self.mem_wb_latch, self.register_file, stall=False)
             
             self.mem_wb_latch=self.mem_stage.step(self.ex_mem_latch, self.data_mem,stall=False)
             
-            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, stall=False)
+            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch,old_mem_wb_latch,forwardA,forwardB,stall=False)
             
-            self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall=False)
+            self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall)
             
-            self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall=False)
+            self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall)
             
             self.clock += 1
         print(f"Simulation complete in {self.clock} cycles.")
