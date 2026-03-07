@@ -1,4 +1,3 @@
-
 class DecodeStage:
     def __init__(self, register_file):
         """
@@ -9,10 +8,11 @@ class DecodeStage:
     def step(self, if_id_latch, id_ex_latch, stall: bool):
         """
         Executes one clock cycle of the Decode stage.
+        Returns a tuple: (target_pc, flush_if) for early branch resolution.
         """
         if stall or if_id_latch.is_nop:
             id_ex_latch.is_nop = True
-            return
+            return None, False
 
         instr = if_id_latch.instruction
         pc = if_id_latch.pc
@@ -25,8 +25,11 @@ class DecodeStage:
         mem_write = False
         mem_to_reg = False
         is_branch = False
+        
+        target_pc = None
+        flush_if = False
 
-        if instr.opcode in ["add", "sub", "addi", "la","slt"]:
+        if instr.opcode in ["add", "sub", "addi", "la", "slt"]:
             reg_write = True
             
         elif instr.opcode == "lw":
@@ -40,9 +43,30 @@ class DecodeStage:
         elif instr.opcode in ["beq", "bne"]:
             is_branch = True
             
+            # Evaluate the branch condition immediately in the ID stage
+            branch_taken = (instr.opcode == "beq" and rs1_val == rs2_val) or \
+                           (instr.opcode == "bne" and rs1_val != rs2_val)
+                           
+            if branch_taken:
+                target_pc = pc + instr.imm 
+                flush_if = True
+                
+                # Turn the branch itself into a NOP for the EX stage, 
+                # because its work is already completely done!
+                id_ex_latch.is_nop = True  
+                return target_pc, flush_if
+            
         elif instr.opcode == "jal":
             reg_write = True
-            is_branch = True   
+            is_branch = True 
+            
+            # JAL is an unconditional jump, so it always resolves early
+            target_pc = pc + instr.imm
+            flush_if = True
+            
+            # Note: We do NOT make JAL a NOP for EX! It still needs to travel 
+            # down the pipeline to write the return address (PC+4) to the rd register.
+
         id_ex_latch.is_nop = False
         id_ex_latch.pc = pc
         id_ex_latch.instruction = instr
@@ -61,3 +85,5 @@ class DecodeStage:
         id_ex_latch.mem_write = mem_write
         id_ex_latch.mem_to_reg = mem_to_reg
         id_ex_latch.is_branch = is_branch
+        
+        return target_pc, flush_if

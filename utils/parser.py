@@ -2,7 +2,6 @@ from .Instruction import Instruction
 from components.data_mem import Memory
 
 def parser(input_file):
-
     lines = input_file.splitlines()
     label_map = {}
     clean_lines = []
@@ -12,6 +11,7 @@ def parser(input_file):
     data_label_map = {}
     mode = None
 
+    # --- PASS 1: Extract Labels and Clean Code ---
     for single_line in lines:
         line = single_line.split("#")[0].strip()
 
@@ -53,7 +53,7 @@ def parser(input_file):
             label = label_part.strip()
 
             if label:
-                label_map[label] = instr_index*4
+                label_map[label] = instr_index * 4
 
             line = rest.strip()
             if not line:
@@ -62,43 +62,45 @@ def parser(input_file):
         clean_lines.append(line)
         instr_index += 1
 
+    # --- PASS 2: Generate Instructions ---
     instr_index = 0
 
     for line in clean_lines:
-
         words = line.replace(",", "").split()
+        current_pc = instr_index * 4
+
         if words[0] == "add" or words[0] == "sub":
-            instr = Instruction(words[0],instr_index*4,int(words[1][1:]),int(words[2][1:]),int(words[3][1:]))
+            instr = Instruction(words[0], current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
 
         elif words[0] == "addi":
-            instr = Instruction( words[0],instr_index*4,int(words[1][1:]),int(words[2][1:]),imm=int(words[3]))
+            instr = Instruction(words[0], current_pc, int(words[1][1:]), int(words[2][1:]), imm=int(words[3]))
 
         elif words[0] == "lw":
             rd = int(words[1][1:])
             offset, reg = words[2].split("(")
             imm = int(offset)
             rs1 = int(reg[:-1][1:])
-            print(rs1, imm)
-            instr = Instruction(words[0],instr_index*4,rd,rs1,imm=imm)
+            instr = Instruction(words[0], current_pc, rd, rs1, imm=imm)
 
         elif words[0] == "sw":
             rs2 = int(words[1][1:])
             offset, reg = words[2].split("(")
             imm = int(offset)
             rs1 = int(reg[:-1][1:])
-
-            instr = Instruction(words[0],instr_index*4,rs1=rs1,rs2=rs2,imm=imm)
+            instr = Instruction(words[0], current_pc, rs1=rs1, rs2=rs2, imm=imm)
 
         elif words[0] == "beq" or words[0] == "bne":
             rs1 = int(words[1][1:])
             rs2 = int(words[2][1:])
             label = words[3]
             target = label_map[label]
+            
+            # FIX: Calculate PC-relative offset instead of absolute target
+            offset = target - current_pc 
+            instr = Instruction(words[0], current_pc, rs1=rs1, rs2=rs2, imm=offset)
 
-            instr = Instruction(words[0],instr_index*4,rs1=rs1,rs2=rs2,imm=target)
-
-        elif words[0]=="la":
-            rd =int(words[1][1:])
+        elif words[0] == "la":
+            rd = int(words[1][1:])
             label = words[2]
 
             if label in data_label_map:
@@ -106,25 +108,39 @@ def parser(input_file):
             elif label in label_map:
                 imm = label_map[label]
             else:
-                raise Exception("Label not found")                       
+                raise Exception(f"Label '{label}' not found")                       
 
-            instr=Instruction(words[0],instr_index*4,rd,imm=imm)
+            instr = Instruction(words[0], current_pc, rd, imm=imm)
 
-        # slt x1 x2 x3 if x2<x3 then x1=1
-        elif words[0]=="slt":
-            instr = Instruction(words[0],instr_index*4,int(words[1][1:]),int(words[2][1:]),int(words[3][1:]))
+        elif words[0] == "slt":
+            instr = Instruction(words[0], current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
+            
+        elif words[0] == "jal":
+            rd = int(words[1][1:])
+            label = words[2]
+            target = label_map[label]
+            
+            # FIX: Calculate PC-relative offset for jump
+            offset = target - current_pc
+            instr = Instruction(words[0], current_pc, rd=rd, imm=offset)
 
-        elif words[0]=="j":
-            label=words[1]
-            target=label_map[label]
-            instr=Instruction(words[0],instr_index*4,imm=target)
+        elif words[0] == "j":
+            label = words[1]
+            target = label_map[label]
+            
+            # FIX: Calculate PC-relative offset and convert 'j' to 'jal x0'
+            offset = target - current_pc
+            instr = Instruction("jal", current_pc, rd=0, imm=offset)
 
         else:
+            print(f"Warning: Unrecognized instruction '{words[0]}'")
             continue
 
         instructions.append(instr)
         instr_index += 1
+
     print("Parsed Instructions:")
     for instr in instructions:
         print(instr.__dict__)
-    return instructions,memory
+        
+    return instructions, memory

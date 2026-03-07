@@ -2,7 +2,9 @@ from core.latches import IF_ID_Latch, ID_EX_Latch, EX_MEM_Latch, MEM_WB_Latch
 from stages import FetchStage, DecodeStage, ExecuteStage, MemStage, WritebackStage
 from components.register import RegisterFile
 from core.hazard_unit import HazardUnit
-hazard=HazardUnit()
+
+hazard = HazardUnit()
+
 class Simulator:
     def __init__(self, inst_mem, data_mem):
         self.clock = 0
@@ -33,20 +35,33 @@ class Simulator:
             
             if not instructions_left and pipeline_empty:
                 break 
-            forwardA,forwardB,stall=hazard.detect(self.if_id_latch,self.id_ex_latch,self.ex_mem_latch,self.mem_wb_latch)
-            old_mem_wb_latch=self.mem_wb_latch
+                
+            forwardA, forwardB, stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
+            old_mem_wb_latch = self.mem_wb_latch
 
+            # --- Reverse Stage Evaluation ---
+            
             self.writeback_stage.step(self.mem_wb_latch, self.register_file, stall=False)
             
-            self.mem_wb_latch=self.mem_stage.step(self.ex_mem_latch, self.data_mem,stall=False)
+            self.mem_wb_latch = self.mem_stage.step(self.ex_mem_latch, self.data_mem, stall=False)
             
-            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch,old_mem_wb_latch,forwardA,forwardB,stall=False)
+            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, old_mem_wb_latch, forwardA, forwardB, stall=False)
             
-            self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall)
+            # Catch the early resolution signals from the Decode stage
+            target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall)
             
+            # Fetch normally (grabs PC+4 into the if_id_latch)
             self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall)
             
+            # --- EARLY BRANCH RESOLUTION HARDWARE LOGIC ---
+            # If Decode determined a branch/jump was taken this cycle, it means the instruction 
+            # that Fetch *just* grabbed is wrong. We simulate the hardware flush here.
+            if flush_if and not stall:
+                self.if_id_latch.is_nop = True  # Flush the IF/ID latch (Creates the 1-cycle bubble)
+                self.pc = target_pc             # Override the PC so next cycle fetches the actual target
+            
             self.clock += 1
+            
         print(f"Simulation complete in {self.clock} cycles.")
         print("Final Register State:")
         for i in range(32):
@@ -55,4 +70,4 @@ class Simulator:
         for addr in range(0, len(self.data_mem.mem), 4):
             word = self.data_mem.read_word(addr)
             if word != 0:
-                print(f"0x{addr:08x}: 0x{word:08x}") 
+                print(f"{addr}: {word}")
