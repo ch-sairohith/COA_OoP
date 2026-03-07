@@ -38,6 +38,11 @@ class ExecuteStage:
             alu_result = rs1_val + imm
         elif instr.opcode == "sub":
             alu_result = rs1_val - rs2_val
+        elif instr.opcode == "slt":
+            if rs1_val < rs2_val:
+                alu_result=1
+            else:
+                alu_result=0
         elif instr.opcode in ["lw", "sw"]:
             alu_result = rs1_val + imm 
         elif instr.opcode in ["beq", "bne"]:

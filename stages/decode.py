@@ -26,7 +26,7 @@ class DecodeStage:
         mem_to_reg = False
         is_branch = False
 
-        if instr.opcode in ["add", "sub", "addi", "la"]:
+        if instr.opcode in ["add", "sub", "addi", "la","slt"]:
             reg_write = True
             
         elif instr.opcode == "lw":

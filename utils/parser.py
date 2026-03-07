@@ -110,6 +110,15 @@ def parser(input_file):
 
             instr=Instruction(words[0],instr_index*4,rd,imm=imm)
 
+        # slt x1 x2 x3 if x2<x3 then x1=1
+        elif words[0]=="slt":
+            instr = Instruction(words[0],instr_index*4,int(words[1][1:]),int(words[2][1:]),int(words[3][1:]))
+
+        elif words[0]=="j":
+            label=words[1]
+            target=label_map[label]
+            instr=Instruction(words[0],instr_index*4,imm=target)
+
         else:
             continue
 
