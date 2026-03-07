@@ -5,7 +5,7 @@ class DecodeStage:
         """
         self.register_file = register_file
 
-    def step(self, if_id_latch, id_ex_latch, stall: bool):
+    def step(self, if_id_latch, id_ex_latch,ex_mem_latch,mem_wb_latch,forwardA,forwardB, stall: bool):
         """
         Executes one clock cycle of the Decode stage.
         Returns a tuple: (target_pc, flush_if) for early branch resolution.
@@ -17,8 +17,25 @@ class DecodeStage:
         instr = if_id_latch.instruction
         pc = if_id_latch.pc
 
-        rs1_val = self.register_file.read(instr.rs1) if instr.rs1 is not None else 0
-        rs2_val = self.register_file.read(instr.rs2) if instr.rs2 is not None else 0
+        if forwardA=="ex_mem":
+            rs1_val=ex_mem_latch.alu_result
+        elif forwardA=="mem_wb":
+            if mem_wb_latch.mem_to_reg:
+                rs1_val=mem_wb_latch.mem_data
+            else:
+                rs1_val=mem_wb_latch.alu_result
+        else:
+            rs1_val = self.register_file.read(instr.rs1) if instr.rs1 is not None else 0
+
+        if forwardB=="ex_mem":
+            rs2_val=ex_mem_latch.alu_result
+        elif forwardB=="mem_wb":
+            if mem_wb_latch.mem_to_reg:
+                rs2_val=mem_wb_latch.mem_data
+            else:
+                rs2_val=mem_wb_latch.alu_result
+        else:
+            rs2_val = self.register_file.read(instr.rs2) if instr.rs2 is not None else 0
 
         reg_write = False
         mem_read = False
@@ -43,9 +60,7 @@ class DecodeStage:
         elif instr.opcode in ["beq", "bne"]:
             is_branch = True
             
-            # Evaluate the branch condition immediately in the ID stage
-            branch_taken = (instr.opcode == "beq" and rs1_val == rs2_val) or \
-                           (instr.opcode == "bne" and rs1_val != rs2_val)
+            branch_taken = (instr.opcode == "beq" and rs1_val == rs2_val) or (instr.opcode == "bne" and rs1_val != rs2_val)
                            
             if branch_taken:
                 target_pc = pc + instr.imm 
