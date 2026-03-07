@@ -41,12 +41,13 @@ class Simulator:
             if not instructions_left and pipeline_empty:
                 break 
                 
-            forwardA, forwardB, stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
+            forwardA, forwardB, forwardC,forwardD,stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
             
             if not isforward:
                 forwardA = "NONE"
                 forwardB = "NONE"
-                
+                forwardC="NONE"
+                forwardD="NONE"
                 if not self.if_id_latch.is_nop and self.if_id_latch.instruction:
                     instr = self.if_id_latch.instruction
                     
@@ -60,18 +61,33 @@ class Simulator:
                     
                     if conflict_ex or conflict_mem or conflict_wb:
                         stall = True
-
+            # forwarding
+            stall_if=False
+            stall_de=False
+            stall_exe=False
+            if stall=="execute":
+              stall_exe=True
+              stall_de=True
+              stall_if=True
+            elif stall=="decode":
+                stall_de=True
+                stall_if=True
+            if not isforward:
+              stall_if=stall
+              stall_de=stall
+              stall_exe=stall
             old_mem_wb_latch = self.mem_wb_latch
+            old_ex_mem_latch=self.ex_mem_latch
 
-            self.writeback_stage.step(self.mem_wb_latch, self.register_file, stall=False)
+            self.writeback_stage.step(self.mem_wb_latch, self.register_file,stall=False)
             
             self.mem_wb_latch = self.mem_stage.step(self.ex_mem_latch, self.data_mem, stall=False)
             
-            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, old_mem_wb_latch, forwardA, forwardB, stall=False)
+            self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, old_mem_wb_latch, forwardA, forwardB, stall_exe)
         
-            target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall)
+            target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch,old_ex_mem_latch,old_mem_wb_latch,forwardC,forwardD, stall_de)
 
-            self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall)
+            self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall_if)
           
             if flush_if and not stall:
                 self.if_id_latch.is_nop = True 
