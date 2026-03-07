@@ -2,8 +2,13 @@ from core.latches import IF_ID_Latch, ID_EX_Latch, EX_MEM_Latch, MEM_WB_Latch
 from stages import FetchStage, DecodeStage, ExecuteStage, MemStage, WritebackStage
 from components.register import RegisterFile
 from core.hazard_unit import HazardUnit
+import json
+
+with open('config.json', 'r') as file:
+    config = json.load(file)
 
 hazard = HazardUnit()
+isforward = config.get("forwarding_enabled", True)
 
 class Simulator:
     def __init__(self, inst_mem, data_mem):
@@ -37,28 +42,40 @@ class Simulator:
                 break 
                 
             forwardA, forwardB, stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
+            
+            if not isforward:
+                forwardA = "NONE"
+                forwardB = "NONE"
+                
+                if not self.if_id_latch.is_nop and self.if_id_latch.instruction:
+                    instr = self.if_id_latch.instruction
+                    
+                    src_regs = []
+                    if getattr(instr, 'rs1', None) not in [None, 0]: src_regs.append(instr.rs1)
+                    if getattr(instr, 'rs2', None) not in [None, 0]: src_regs.append(instr.rs2)
+                    
+                    conflict_ex = (not self.id_ex_latch.is_nop and self.id_ex_latch.reg_write and self.id_ex_latch.rd_addr in src_regs)
+                    conflict_mem = (not self.ex_mem_latch.is_nop and self.ex_mem_latch.reg_write and self.ex_mem_latch.rd_addr in src_regs)
+                    conflict_wb = (not self.mem_wb_latch.is_nop and self.mem_wb_latch.reg_write and self.mem_wb_latch.rd_addr in src_regs)
+                    
+                    if conflict_ex or conflict_mem or conflict_wb:
+                        stall = True
+
             old_mem_wb_latch = self.mem_wb_latch
 
-            # --- Reverse Stage Evaluation ---
-            
             self.writeback_stage.step(self.mem_wb_latch, self.register_file, stall=False)
             
             self.mem_wb_latch = self.mem_stage.step(self.ex_mem_latch, self.data_mem, stall=False)
             
             self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, old_mem_wb_latch, forwardA, forwardB, stall=False)
-            
-            # Catch the early resolution signals from the Decode stage
+        
             target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch, stall)
-            
-            # Fetch normally (grabs PC+4 into the if_id_latch)
+
             self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall)
-            
-            # --- EARLY BRANCH RESOLUTION HARDWARE LOGIC ---
-            # If Decode determined a branch/jump was taken this cycle, it means the instruction 
-            # that Fetch *just* grabbed is wrong. We simulate the hardware flush here.
+          
             if flush_if and not stall:
-                self.if_id_latch.is_nop = True  # Flush the IF/ID latch (Creates the 1-cycle bubble)
-                self.pc = target_pc             # Override the PC so next cycle fetches the actual target
+                self.if_id_latch.is_nop = True 
+                self.pc = target_pc       
             
             self.clock += 1
             
