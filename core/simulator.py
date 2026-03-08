@@ -41,26 +41,15 @@ class Simulator:
             if not instructions_left and pipeline_empty:
                 break 
                 
-            forwardA, forwardB, forwardC,forwardD,stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
+            forwardA, forwardB, forwardC, forwardD, stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
             
             if not isforward:
                 forwardA = "NONE"
                 forwardB = "NONE"
-                forwardC="NONE"
-                forwardD="NONE"
-                if not self.if_id_latch.is_nop and self.if_id_latch.instruction:
-                    instr = self.if_id_latch.instruction
-                    
-                    src_regs = []
-                    if getattr(instr, 'rs1', None) not in [None, 0]: src_regs.append(instr.rs1)
-                    if getattr(instr, 'rs2', None) not in [None, 0]: src_regs.append(instr.rs2)
-                    
-                    conflict_ex = (not self.id_ex_latch.is_nop and self.id_ex_latch.reg_write and self.id_ex_latch.rd_addr in src_regs)
-                    conflict_mem = (not self.ex_mem_latch.is_nop and self.ex_mem_latch.reg_write and self.ex_mem_latch.rd_addr in src_regs)
-                    conflict_wb = (not self.mem_wb_latch.is_nop and self.mem_wb_latch.reg_write and self.mem_wb_latch.rd_addr in src_regs)
-                    
-                    if conflict_ex or conflict_mem or conflict_wb:
-                        stall = True
+                forwardC = "NONE"
+                forwardD = "NONE"
+                # Bug 5/6 fix: call detect_nonforwarding() instead of duplicating logic with type mismatch
+                stall = hazard.detect_nonforwarding(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
             # forwarding
             stall_if=False
             stall_de=False
@@ -85,10 +74,11 @@ class Simulator:
             
             self.execute_stage.step(self.id_ex_latch, self.ex_mem_latch, old_mem_wb_latch, forwardA, forwardB, stall_exe)
         
-            target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch,old_ex_mem_latch,old_mem_wb_latch,forwardC,forwardD, stall_de)
+            target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch, old_ex_mem_latch, old_mem_wb_latch, forwardC, forwardD, stall_de)
 
             self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall_if)
           
+            # Bug 1 fix: use `stall is False` so string stall values don't suppress the flush
             if flush_if and stall is False:
                 self.if_id_latch.is_nop = True 
                 self.pc = target_pc       
