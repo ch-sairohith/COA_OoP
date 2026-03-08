@@ -75,7 +75,7 @@ class Simulator:
             if not isforward:
               stall_if=stall
               stall_de=stall
-              stall_exe=stall
+              stall_exe=False
             old_mem_wb_latch = self.mem_wb_latch
             old_ex_mem_latch=self.ex_mem_latch
 
@@ -89,7 +89,7 @@ class Simulator:
 
             self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall_if)
           
-            if flush_if and not stall:
+            if flush_if and stall is False:
                 self.if_id_latch.is_nop = True 
                 self.pc = target_pc       
             

@@ -14,11 +14,13 @@ class ID_EX_Latch:
   rs2_val:int =0
   rs1_addr:int=0
   rs2_addr:int=0
+  rd_addr:int=0
   imm:int=0
   alu_op:str=""
   reg_write:bool=False
   mem_read:bool=False
   mem_write:bool=False
+  mem_to_reg:bool=False
   is_branch:bool=False
 @dataclass 
 class EX_MEM_Latch:

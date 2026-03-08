@@ -52,12 +52,13 @@ def parser(input_file):
             label_part, _, rest = line.partition(":")
             label = label_part.strip()
 
-            if label:
+            # Only treat as a label if label_part has no spaces (valid label names can't have spaces)
+            if label and " " not in label:
                 label_map[label] = instr_index * 4
 
-            line = rest.strip()
-            if not line:
-                continue
+                line = rest.strip()
+                if not line:
+                    continue
 
         clean_lines.append(line)
         instr_index += 1
@@ -139,8 +140,4 @@ def parser(input_file):
         instructions.append(instr)
         instr_index += 1
 
-    print("Parsed Instructions:")
-    for instr in instructions:
-        print(instr.__dict__)
-        
     return instructions, memory

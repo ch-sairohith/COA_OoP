@@ -5,6 +5,5 @@ from components.Instruction_mem import InstructionMemory
 with open("program.asm", "r") as f:
   instructions,memory=parser(f.read())
 inst_mem=InstructionMemory(instructions) 
-print(memory.read_word(0))
 sim = Simulator(inst_mem, memory)
 sim.run()

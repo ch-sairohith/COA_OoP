@@ -1,34 +1,34 @@
 class ExecuteStage:
-  def step(self,ID_EX_Latch, EX_MEM_Latch,MEM_WB_Latch,forwardA,forwardB,stall):
+  def step(self, id_ex_latch, ex_mem_latch, mem_wb_latch, forwardA, forwardB, stall):
         """
         Executes one clock cycle of the Execute stage.
         """
-        if stall or ID_EX_Latch.is_nop:
-            EX_MEM_Latch.is_nop = True
+        if stall or id_ex_latch.is_nop:
+            ex_mem_latch.is_nop = True
             return
 
         if forwardA == "ex_mem":
-            rs1_val=EX_MEM_Latch.alu_result
+            rs1_val=ex_mem_latch.alu_result
         elif forwardA=="mem_wb":
-            if MEM_WB_Latch.mem_to_reg:
-                rs1_val=MEM_WB_Latch.mem_data
+            if mem_wb_latch.mem_to_reg:
+                rs1_val=mem_wb_latch.mem_data
             else:
-                rs1_val=MEM_WB_Latch.alu_result
+                rs1_val=mem_wb_latch.alu_result
         else:
-            rs1_val = ID_EX_Latch.rs1_val
+            rs1_val = id_ex_latch.rs1_val
 
         if forwardB == "ex_mem":
-            rs2_val=EX_MEM_Latch.alu_result
+            rs2_val=ex_mem_latch.alu_result
         elif forwardB=="mem_wb":
-            if MEM_WB_Latch.mem_to_reg:
-                rs2_val=MEM_WB_Latch.mem_data
+            if mem_wb_latch.mem_to_reg:
+                rs2_val=mem_wb_latch.mem_data
             else:
-                rs2_val=MEM_WB_Latch.alu_result
+                rs2_val=mem_wb_latch.alu_result
         else:
-            rs2_val = ID_EX_Latch.rs2_val
+            rs2_val = id_ex_latch.rs2_val
 
-        instr = ID_EX_Latch.instruction
-        imm = ID_EX_Latch.imm
+        instr = id_ex_latch.instruction
+        imm = id_ex_latch.imm
 
         alu_result = 0
         
@@ -48,14 +48,14 @@ class ExecuteStage:
         elif instr.opcode in ["beq", "bne"]:
             alu_result = rs1_val - rs2_val 
         elif instr.opcode == "jal":
-            alu_result = ID_EX_Latch.pc + 4  
+            alu_result = id_ex_latch.pc + 4  
 
-        EX_MEM_Latch.is_nop = False
-        EX_MEM_Latch.alu_result = alu_result
-        EX_MEM_Latch.rd_addr = ID_EX_Latch.rd_addr
-        EX_MEM_Latch.rs2_val = rs2_val
-        EX_MEM_Latch.mem_size = 4 if instr.opcode in ["lw", "sw"] else 0
-        EX_MEM_Latch.mem_read = ID_EX_Latch.mem_read
-        EX_MEM_Latch.mem_write = ID_EX_Latch.mem_write
-        EX_MEM_Latch.reg_write = ID_EX_Latch.reg_write
+        ex_mem_latch.is_nop = False
+        ex_mem_latch.alu_result = alu_result
+        ex_mem_latch.rd_addr = id_ex_latch.rd_addr
+        ex_mem_latch.rs2_val = rs2_val
+        ex_mem_latch.mem_size = 4 if instr.opcode in ["lw", "sw"] else 0
+        ex_mem_latch.mem_read = id_ex_latch.mem_read
+        ex_mem_latch.mem_write = id_ex_latch.mem_write
+        ex_mem_latch.reg_write = id_ex_latch.reg_write
     
