@@ -18,9 +18,10 @@ class HazardUnit:
                 stall = "memory"
                 ex_mem.counter += 1
 
-        if not stall and not id_ex.is_nop and id_ex.alu_op == "add":
+        if  not id_ex.is_nop and id_ex.alu_op == "add":
             if self.latency_add > 1 and id_ex.counter < self.latency_add - 1:
-                stall = "execute"
+                if not stall:
+                    stall="execute"
                 id_ex.counter += 1
 
         if not ex_mem.is_nop and not id_ex.is_nop and ex_mem.reg_write and not ex_mem.mem_read and ex_mem.rd_addr != 0:

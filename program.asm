@@ -8,7 +8,7 @@ la x10, arr          # x10 = base address of arr
 la x5, n
 lw x11, 0(x5)        # x11 = n = 20
 
-addi x12, x0, 0      # i = 0  (no la+lw needed — immediate!)
+addi x12, x0, 0      # i = 0  
 
 outer_loop:
 slt x20, x12, x11

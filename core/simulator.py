@@ -11,9 +11,10 @@ hazard = HazardUnit()
 isforward = config.get("forwarding_enabled", True)
 
 class Simulator:
-    def __init__(self, inst_mem, data_mem):
+    def __init__(self, inst_mem, data_mem, cache_hierarchy):
         self.clock = 0
         self.pc = 0
+        self.cache_hierarchy = cache_hierarchy
         # Performance counters
         self.instructions_retired = 0
         self.load_use_stalls    = 0   
@@ -29,7 +30,7 @@ class Simulator:
         self.ex_mem_latch = EX_MEM_Latch()
         self.mem_wb_latch = MEM_WB_Latch()
   
-        self.fetch_stage = FetchStage(inst_mem)
+        self.fetch_stage = FetchStage(inst_mem, self.cache_hierarchy)
         self.decode_stage = DecodeStage(self.register_file)
         self.execute_stage = ExecuteStage()
         self.mem_stage = MemStage()
@@ -81,7 +82,7 @@ class Simulator:
                 # Do NOT overwrite ex_mem_latch so it holds its counter!
                 self.mem_wb_latch = MEM_WB_Latch(is_nop=True)
             else:
-                self.mem_wb_latch = self.mem_stage.step(self.ex_mem_latch, self.data_mem, stall=False)
+                self.mem_wb_latch, mem_latency = self.mem_stage.step(self.ex_mem_latch, stall=False, cache_hierarchy=self.cache_hierarchy)
             
             # 3. Execute Stage
             if stall == "memory":
@@ -106,7 +107,7 @@ class Simulator:
             if stall:
                 pass # Fetch is frozen for any stall type
             else:
-                self.pc = self.fetch_stage.step(self.pc, self.if_id_latch, stall=False)
+                self.pc, fetch_latency = self.fetch_stage.step(self.pc, self.if_id_latch, stall=False)
           
             if flush_if and stall is False:
                 self.if_id_latch.is_nop = True
