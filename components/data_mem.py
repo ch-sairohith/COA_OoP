@@ -4,7 +4,7 @@ class Memory:
     def __init__(self,size=4096):
         self.size=size
         self.mem=bytearray(size)
-        self.base_address=0
+        self.base_address=1024
 
     def read_byte(self,address):
 

@@ -12,11 +12,8 @@ class HazardUnit:
         forwardA, forwardB, forwardC, forwardD = "NONE", "NONE", "NONE", "NONE"
         stall = False
 
-        if not ex_mem.is_nop and (ex_mem.mem_read or ex_mem.mem_write):
-            latency = self.latency_lw if ex_mem.mem_read else self.latency_sw
-            if latency > 1 and ex_mem.counter < latency - 1:
-                stall = "memory"
-                ex_mem.counter += 1
+        # Multi-cycle D-cache / memory latency is handled in Simulator using
+        # cache-reported latency (merged with config); not driven by ex_mem.counter here.
 
         if  not id_ex.is_nop and id_ex.alu_op == "add":
             if self.latency_add > 1 and id_ex.counter < self.latency_add - 1:

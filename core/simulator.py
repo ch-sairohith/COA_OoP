@@ -36,29 +36,37 @@ class Simulator:
         self.mem_stage = MemStage()
         self.writeback_stage = WritebackStage()
 
+        self._mem_wb_buffer = None
+        self._mem_bubbles_remaining = 0
+
     def run(self):
+        latency_lw = config["latencies"].get("lw", 1)
+        latency_sw = config["latencies"].get("sw", 1)
+
         while True:
             max_pc = len(self.fetch_stage.inst_mem.instructions) * 4
-            instructions_left = self.pc < max_pc
+            instructions_left = self.pc < max_pc or self.fetch_stage.is_pending()
             
             pipeline_empty = (self.if_id_latch.is_nop and 
                               self.id_ex_latch.is_nop and 
                               self.ex_mem_latch.is_nop and 
-                              self.mem_wb_latch.is_nop)
+                              self.mem_wb_latch.is_nop and
+                              not self.fetch_stage.is_pending())
             
             if not instructions_left and pipeline_empty:
                 break 
+
+            mem_latency_stall = self._mem_bubbles_remaining > 0
                 
             forwardA, forwardB, forwardC, forwardD, stall = hazard.detect(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch)
+            if mem_latency_stall:
+                stall = "memory"
             
             if not isforward:
                 forwardA, forwardB, forwardC, forwardD = "NONE", "NONE", "NONE", "NONE"
-                # Only check non-forwarding hazards if latency hasn't already stalled us
                 if stall not in ["memory", "execute"]:
                     if hazard.detect_nonforwarding(self.if_id_latch, self.id_ex_latch, self.ex_mem_latch, self.mem_wb_latch):
                         stall = True
-
-            # Performance counter logic
             if stall in ["memory", "execute"]:
                 self.execution_stalls += 1
             elif stall == "decode" or stall is True:
@@ -66,6 +74,10 @@ class Simulator:
                     self.load_use_stalls += 1
                 else:
                     self.branch_data_stalls += 1
+                    
+            if not self.ex_mem_latch.is_nop and self.ex_mem_latch.mem_write and self.mem_stage.is_sb_full() and stall != "memory":
+                stall = "memory"
+                self._mem_bubbles_remaining = 1 # give it a small bump to wait for drain
 
             if not self.mem_wb_latch.is_nop:
                 self.instructions_retired += 1
@@ -76,17 +88,38 @@ class Simulator:
             # 1. Writeback (always moves forward)
             self.writeback_stage.step(self.mem_wb_latch, self.register_file, stall=False)
             
-            # 2. Memory Stage
+            # 2. Memory Stage (D-cache latency: first cycle performs access; remaining cycles bubble)
             if stall == "memory":
-                # MEM is busy calculating. Output a bubble.
-                # Do NOT overwrite ex_mem_latch so it holds its counter!
-                self.mem_wb_latch = MEM_WB_Latch(is_nop=True)
+                if self._mem_bubbles_remaining > 0:
+                    self._mem_bubbles_remaining -= 1
+                    if self._mem_bubbles_remaining == 0 and self._mem_wb_buffer is not None:
+                        self.mem_wb_latch = self._mem_wb_buffer
+                        self._mem_wb_buffer = None
+                    else:
+                        self.mem_wb_latch = MEM_WB_Latch(is_nop=True)
+                else:
+                    self.mem_wb_latch = MEM_WB_Latch(is_nop=True)
             else:
-                self.mem_wb_latch, mem_latency = self.mem_stage.step(self.ex_mem_latch, stall=False, cache_hierarchy=self.cache_hierarchy)
-            
-            # 3. Execute Stage
+                raw_wb, cache_lat = self.mem_stage.step(
+                    self.ex_mem_latch, stall=False, cache_hierarchy=self.cache_hierarchy
+                )
+                if (
+                    not self.ex_mem_latch.is_nop
+                    and (self.ex_mem_latch.mem_read or self.ex_mem_latch.mem_write)
+                ):
+                    cfg_lat = latency_lw if self.ex_mem_latch.mem_read else latency_sw
+                    effective = max(cfg_lat, cache_lat)
+                    if effective > 1:
+                        self._mem_wb_buffer = raw_wb
+                        self._mem_bubbles_remaining = effective - 1
+                        self.mem_wb_latch = MEM_WB_Latch(is_nop=True)
+                    else:
+                        self.mem_wb_latch = raw_wb
+                else:
+                    self.mem_wb_latch = raw_wb
+
             if stall == "memory":
-                pass # ID_EX is frozen waiting for memory. Do nothing.
+                pass
             elif stall == "execute":
                 # EX is busy calculating. Output a bubble.
                 # Do NOT overwrite id_ex_latch so it holds its counter!
@@ -103,18 +136,25 @@ class Simulator:
             else:
                 target_pc, flush_if = self.decode_stage.step(self.if_id_latch, self.id_ex_latch, old_ex_mem_latch, old_mem_wb_latch, forwardC, forwardD, stall=False)
 
-            # 5. Fetch Stage
-            if stall:
-                pass # Fetch is frozen for any stall type
-            else:
-                self.pc, fetch_latency = self.fetch_stage.step(self.pc, self.if_id_latch, stall=False)
-          
+            # Branch / jal: resolve PC before fetch so the next instruction is not fetched from the
+            # fall-through path (non-speculative: no wrong-path fetch to "flush" later).
             if flush_if and stall is False:
                 self.if_id_latch.is_nop = True
                 self.pc = target_pc
                 self.flush_cycles += 1
+                # Drop any in-flight multi-cycle I-fetch still tied to the old sequential PC.
+                self.fetch_stage.cancel_pending()
+
+            # 5. Fetch Stage
+            if stall:
+                pass  # Fetch frozen for hazard stalls
+            else:
+                self.pc, fetch_latency = self.fetch_stage.step(self.pc, self.if_id_latch, stall=False)
 
             self.clock += 1
+            # Tick background buffers
+            self.mem_stage.tick(self.cache_hierarchy)
+            self.cache_hierarchy.tick()
             
         ipc = self.instructions_retired / self.clock if self.clock > 0 else 0
         total_stalls = self.load_use_stalls + self.branch_data_stalls + self.execution_stalls + self.flush_cycles
@@ -133,6 +173,10 @@ class Simulator:
             val = self.register_file.read(i)
             if val != 0:
                 print(f"  x{i}: {val}")
+                
+        self.mem_stage.flush_all(self.cache_hierarchy)
+        self.cache_hierarchy.flush_all()
+        
         print("\nFinal Memory State (non-zero words):")
         for addr in range(0, len(self.data_mem.mem), 4):
             word = self.data_mem.read_word(addr)
