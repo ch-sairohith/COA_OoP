@@ -1,6 +1,14 @@
 from components.cache import Cache
 
 class CacheHierarchy:
+    @staticmethod
+    def _data_byte(block, offset):
+        """Unified L2 may hold sparse instruction blocks; treat non-byte slots as 0 for data reads."""
+        b = block[offset]
+        if isinstance(b, int):
+            return b & 0xFF
+        return 0
+
     def __init__(self,config,data_memory,inst_memory):
         self.L1I = Cache(**config["L1I"])
         self.L1D = Cache(**config["L1D"])
@@ -8,6 +16,21 @@ class CacheHierarchy:
         self.data_memory = data_memory
         self.inst_memory = inst_memory
         self.memory_latency = config["MEMORY_LATENCY"]
+        self.wb_buffer = []               
+        self.MAX_WB_SIZE = 4
+        self.memory_busy_cycles = 0  
+        self.active_write = None
+        
+    def tick(self):
+        if self.memory_busy_cycles > 0:
+            self.memory_busy_cycles -= 1
+            if self.memory_busy_cycles == 0 and self.active_write:
+                self._actual_write_back(self.active_write[0], self.active_write[1])
+                self.active_write = None
+                
+        if self.memory_busy_cycles == 0 and self.wb_buffer:
+            self.active_write = self.wb_buffer.pop(0)
+            self.memory_busy_cycles = self.memory_latency
 
     def _read_block_from_cache(self,cache,address):
         #Helper to safely extract the entire data block from a cache on hit
@@ -38,7 +61,7 @@ class CacheHierarchy:
             block[i * 4] = inst
         return block
 
-    def _write_back(self,base_address,data):
+    def _actual_write_back(self,base_address,data):
         for i in range(len(data)):
             val = data[i]
             if isinstance(val, int): 
@@ -46,6 +69,28 @@ class CacheHierarchy:
                     self.data_memory.store_byte(base_address + i, val)
                 except Exception:
                     pass
+
+    def _write_back(self, base_address, data):
+        if len(self.wb_buffer) >= self.MAX_WB_SIZE:
+             addr, old_data = self.wb_buffer.pop(0)
+             self._actual_write_back(addr, old_data)
+        self.wb_buffer.append((base_address, data))
+
+    def _insert_l2(self, address, block, dirty=False):
+        evicted_info = self.L2.insert(address, block, dirty=dirty)
+        if evicted_info:
+            evicted_addr, evicted_data, evicted_dirty = evicted_info
+            
+            # Enforce Inclusion
+            wb_l1d = self.L1D.invalidate(evicted_addr)
+            if wb_l1d:
+                evicted_data = wb_l1d[1]
+                evicted_dirty = True
+                
+            self.L1I.invalidate(evicted_addr)
+            
+            if evicted_dirty:
+                self._write_back(evicted_addr, evicted_data)
 
     def fetch(self,address):
         latency = 0
@@ -59,17 +104,18 @@ class CacheHierarchy:
             block = self._read_block_from_cache(self.L2, address)
             wb = self.L1I.insert(address, block)
             if wb: 
-                wb_l2 = self.L2.insert(wb[0], wb[1], dirty=True)
-                if wb_l2: self._write_back(wb_l2[0], wb_l2[1])
+                evicted_addr, evicted_data, evicted_dirty = wb
+                if evicted_dirty:
+                    self._insert_l2(evicted_addr, evicted_data, dirty=True)
             return value,latency
         latency += self.memory_latency
         block = self._get_instruction_block(address, self.L1I.block_size)
-        wb2 = self.L2.insert(address, block)
-        if wb2: self._write_back(wb2[0], wb2[1])
+        self._insert_l2(address, block)
         wb1 = self.L1I.insert(address, block)
         if wb1: 
-            wb_l2 = self.L2.insert(wb1[0], wb1[1], dirty=True)
-            if wb_l2: self._write_back(wb_l2[0], wb_l2[1])
+            evicted_addr, evicted_data, evicted_dirty = wb1
+            if evicted_dirty:
+                self._insert_l2(evicted_addr, evicted_data, dirty=True)
         offset = address % self.L1I.block_size
         return block[offset], latency
 
@@ -88,18 +134,19 @@ class CacheHierarchy:
             block = self._read_block_from_cache(self.L2, address)
             wb = self.L1D.insert(address, block)
             if wb: 
-                wb_l2 = self.L2.insert(wb[0], wb[1], dirty=True)
-                if wb_l2: self._write_back(wb_l2[0], wb_l2[1])
+                evicted_addr, evicted_data, evicted_dirty = wb
+                if evicted_dirty:
+                    self._insert_l2(evicted_addr, evicted_data, dirty=True)
             return block, latency
         # 3. Main Memory
         latency += self.memory_latency
         block = self._get_data_block(address, self.L1D.block_size)
-        wb2 = self.L2.insert(address, block)
-        if wb2: self._write_back(wb2[0], wb2[1])
+        self._insert_l2(address, block)
         wb1 = self.L1D.insert(address, block)
         if wb1: 
-            wb_l2 = self.L2.insert(wb1[0], wb1[1], dirty=True)
-            if wb_l2: self._write_back(wb_l2[0], wb_l2[1])
+            evicted_addr, evicted_data, evicted_dirty = wb1
+            if evicted_dirty:
+                self._insert_l2(evicted_addr, evicted_data, dirty=True)
         return block, latency
 
     def load_word(self, address):
@@ -119,16 +166,16 @@ class CacheHierarchy:
                     latency += lat
                     visited_blocks.add(block_addr) 
                 inner_offset = (addr) % block_size
-                value |= (byte_block[inner_offset] << (8 * i))
+                value |= (self._data_byte(byte_block, inner_offset) << (8 * i))
             # Sign handling
             if value >= 0x80000000:
                 value -= 0x100000000
             return value, latency
         block, latency = self._ensure_data_block(address)
-        b0 = block[offset]
-        b1 = block[offset + 1]
-        b2 = block[offset + 2]
-        b3 = block[offset + 3]
+        b0 = self._data_byte(block, offset)
+        b1 = self._data_byte(block, offset + 1)
+        b2 = self._data_byte(block, offset + 2)
+        b3 = self._data_byte(block, offset + 3)
         value = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
         # Sign extension
         if value >= 0x80000000:
@@ -171,7 +218,7 @@ class CacheHierarchy:
     def load_byte(self,address):
         block, latency = self._ensure_data_block(address)
         offset = address % self.L1D.block_size
-        return block[offset], latency
+        return self._data_byte(block, offset), latency
 
     def store_byte(self,address,value):
         _, latency = self._ensure_data_block(address)
@@ -185,3 +232,25 @@ class CacheHierarchy:
             "L1D Miss Rate": self.L1D.misses / max(1, (self.L1D.hits + self.L1D.misses)),
             "L2 Miss Rate": self.L2.misses / max(1, (self.L2.hits + self.L2.misses)),
         }
+
+    def flush_all(self):
+        for s in self.L1D.sets:
+            for l in s.lines:
+                if l.valid and l.dirty:
+                    base_addr = self.L1D._reconstruct_address(l.tag, self.L1D.sets.index(s))
+                    self._insert_l2(base_addr, l.data, dirty=True)
+                    l.dirty = False
+        for s in self.L2.sets:
+            for l in s.lines:
+                if l.valid and l.dirty:
+                    base_addr = self.L2._reconstruct_address(l.tag, self.L2.sets.index(s))
+                    self._write_back(base_addr, l.data)
+                    l.dirty = False
+        # Drain the Write-Back buffer
+        while self.wb_buffer:
+             addr, data = self.wb_buffer.pop(0)
+             self._actual_write_back(addr, data)
+        if self.active_write:
+             self._actual_write_back(self.active_write[0], self.active_write[1])
+             self.active_write = None
+        self.memory_busy_cycles = 0

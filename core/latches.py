@@ -26,6 +26,7 @@ class ID_EX_Latch:
     is_branch: bool = False
     mem_size: int = 0
     counter: int = 0
+    needs_translation: bool = False
 
 @dataclass 
 class EX_MEM_Latch:
@@ -38,6 +39,7 @@ class EX_MEM_Latch:
     mem_read: bool = False
     mem_write: bool = False
     counter: int = 0
+    needs_translation: bool = False
 
 @dataclass
 class MEM_WB_Latch:

@@ -4,6 +4,7 @@ class CacheLine:
         self.dirty = False
         self.tag = None
         self.data = [None] * block_size
+        self.access_count = 0
 
 class CacheSet:
     def __init__(self, associativity, block_size):
@@ -43,6 +44,7 @@ class Cache:
             line = cache_set.lines[i]
             if line.valid and line.tag == tag:
                 self.hits += 1
+                line.access_count += 1
                 if i in cache_set.lru_order:
                     cache_set.lru_order.remove(i)
                 cache_set.lru_order.append(i)
@@ -59,6 +61,7 @@ class Cache:
             line = cache_set.lines[i]
             if line.valid and line.tag == tag:
                 self.hits += 1
+                line.access_count += 1
                 line.data[offset] = value
                 line.dirty = True
                 if i in cache_set.lru_order:
@@ -78,6 +81,7 @@ class Cache:
             if line.valid and line.tag == tag:
                 line.data = list(block_data)
                 line.dirty = dirty
+                line.access_count += 1
                 if i in cache_set.lru_order:
                     cache_set.lru_order.remove(i)
                 cache_set.lru_order.append(i)
@@ -92,24 +96,62 @@ class Cache:
                 line.tag = tag
                 line.dirty = dirty
                 line.data = list(block_data) 
+                line.access_count = 1
                 if i in cache_set.lru_order:
                     cache_set.lru_order.remove(i)
                 cache_set.lru_order.append(i)
                 return None
             i += 1
-        # -------- 2. Eviction (LRU) since set is full --------
-        lru_index = cache_set.lru_order.pop(0)
-        evict_line = cache_set.lines[lru_index]
-        write_back_info = None
-        if evict_line.dirty:
-            base_address = self._reconstruct_address(evict_line.tag, index)
-            write_back_info = (base_address, evict_line.data)
+        # -------- 2. Eviction since set is full --------
+        evict_index = -1
+        if self.replacement_policy == "LFU":
+            min_access = float('inf')
+            candidates = []
+            for idx in range(len(cache_set.lines)):
+                if cache_set.lines[idx].access_count < min_access:
+                    min_access = cache_set.lines[idx].access_count
+                    candidates = [idx]
+                elif cache_set.lines[idx].access_count == min_access:
+                    candidates.append(idx)
+            # Tie breaker: LRU among candidates
+            for idx in cache_set.lru_order:
+                if idx in candidates:
+                    evict_index = idx
+                    break
+        else:
+            # Default LRU
+            evict_index = cache_set.lru_order[0]
+            
+        cache_set.lru_order.remove(evict_index)
+        evict_line = cache_set.lines[evict_index]
+        
+        evicted_base_address = self._reconstruct_address(evict_line.tag, index)
+        evicted_info = (evicted_base_address, list(evict_line.data), evict_line.dirty)
+        
         evict_line.valid = True
         evict_line.tag = tag
         evict_line.dirty = dirty
         evict_line.data = list(block_data) 
-        cache_set.lru_order.append(lru_index)
-        return write_back_info
+        evict_line.access_count = 1
+        cache_set.lru_order.append(evict_index)
+        return evicted_info
+
+    def invalidate(self, address):
+        index, tag, offset = self._get_index_tag_offset(address)
+        cache_set = self.sets[index]
+        i = 0
+        while i < len(cache_set.lines):
+            line = cache_set.lines[i]
+            if line.valid and line.tag == tag:
+                line.valid = False
+                if i in cache_set.lru_order:
+                    cache_set.lru_order.remove(i)
+                if line.dirty:
+                    base_address = self._reconstruct_address(tag, index)
+                    return (base_address, list(line.data))
+                return None
+            i += 1
+        return None
     
     def _reconstruct_address(self, tag, index):
         offset_bits = self.block_size.bit_length() - 1
