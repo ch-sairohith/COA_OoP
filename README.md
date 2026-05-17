@@ -10,7 +10,26 @@ This simulator models a classic 5-stage RISC-V pipeline:
 IF → ID → EX → MEM → WB
 ```
 
-It supports data forwarding, stall detection, early branch resolution, and now a full two-level cache hierarchy (L1I, L1D, L2). We also wrote an assembler/parser so you can write actual `.asm` files and run them through the simulator.
+It supports data forwarding, stall detection, early branch resolution, a full two-level cache hierarchy (L1I, L1D, L2), and a complete Virtual Memory subsystem. We also wrote an assembler/parser so you can write actual `.asm` files and run them through the simulator, or parse trace files for testing.
+
+## How to Run
+
+> Make sure you have Python 3 installed.
+
+### Standard Mode
+1. Write your assembly program in `program.asm`
+2. Run:
+   ```bash
+   python main.py
+   ```
+3. The simulator prints final register state, non-zero memory, stall breakdown, IPC, and cache miss rates.
+
+### Trace Mode (Virtual Memory Testing)
+To execute a trace file containing memory operations (like `test_trace.trc`), run:
+```bash
+python main.py --trace test_trace.trc
+```
+This mode also prints detailed Virtual Memory statistics (TLB hits/misses, page faults, swap operations, etc.).
 
 ## Features
 
@@ -31,11 +50,19 @@ It supports data forwarding, stall detection, early branch resolution, and now a
 - **Write-back + inclusion policy** — Dirty evictions from L1 are written back through L2; evicting a block from L2 also invalidates it in L1
 - **Cache statistics** — Miss rate reported per cache level (L1I, L1D, L2) at end of execution
 
+### Phase 3 — Virtual Memory Subsystem
+- **Virtual to Physical Translation** — Address translation seamlessly integrated into the memory stage (MEM).
+- **TLB & Hardware Page Walker** — Supports fast address translation through TLB and multi-level page table walking on misses.
+- **Demand Paging** — Frame allocator and secondary memory structures to simulate page faults and swap-ins.
+- **Trace-based Execution** — Capable of reading and executing instruction trace files (`test_trace.trc`) for intensive memory and translation testing.
+- **Multi-cycle Execution Latencies** — Pipeline stall logic in the EX stage extended to support multi-cycle instructions like `mul`.
+
+
 ## Supported Instructions
 
 | Type | Instructions |
 |------|-------------|
-| R-type | `add`, `sub`, `slt` |
+| R-type | `add`, `sub`, `slt`, `mul` |
 | I-type | `addi`, `lw` |
 | S-type | `sw` |
 | B-type | `beq`, `bne` |
@@ -48,7 +75,9 @@ It supports data forwarding, stall detection, early branch resolution, and now a
 COA_OoP/
 ├── main.py                  # Entry point — run this
 ├── program.asm              # Assembly program to simulate
+├── test_trace.trc           # Trace file with operations for testing
 ├── config.json              # Cache + pipeline configuration
+├── config_vm.ini            # Virtual memory configuration
 │
 ├── core/
 │   ├── simulator.py         # Main simulation loop
@@ -69,21 +98,19 @@ COA_OoP/
 │   ├── cache.py             # Generic cache (LRU / LFU, set-associative)
 │   └── cache_hierarchy.py   # L1I + L1D + L2 hierarchy with eviction logic
 │
-└── utils/
-    ├── parser.py            # Assembles .asm → Instruction objects
-    └── Instruction.py       # Instruction dataclass
+├── utils/
+│   ├── parser.py            # Assembles .asm → Instruction objects
+│   └── Instruction.py       # Instruction dataclass
+│
+└── vm/                      # Phase 3 Virtual Memory subsystem
+    ├── address_translator.py# Core VA-to-PA translation logic
+    ├── frame_allocator.py   # Physical frame management
+    ├── page_table.py        # Page table entry structures
+    ├── page_walker.py       # Hardware page table walker
+    ├── tlb.py               # Translation Lookaside Buffer
+    └── secondary_memory.py  # Disk/Swap storage model
 ```
 
-## How to Run
-
-> Make sure you have Python 3 installed.
-
-1. Write your assembly program in `program.asm`
-2. Run:
-   ```bash
-   python main.py
-   ```
-3. The simulator prints final register state, non-zero memory, stall breakdown, IPC, and cache miss rates.
 
 ## Configuration
 
@@ -203,6 +230,18 @@ The included `program.asm` runs **bubble sort** on an array and sorts it in-plac
 > All meetings: **Nikhil & Sai Rohith**
 
 ---
+
+### 12 May 2026
+
+**Accomplished:** Integrated the Virtual Memory (VM) subsystem directly into the 5-stage pipeline. `AddressTranslator` is now hooked up in the MEM stage. Added support for `mul` instructions with multi-cycle execution latencies. Implemented trace file (`test_trace.trc`) parsing for extensive VM evaluation.
+
+**Design Decisions:**
+- VA-to-PA translation happens inline during the MEM stage.
+- TLB hits take 1 cycle; TLB misses stall the pipeline for the duration of the page walk.
+- Added `config_vm.ini` to manage VM parameters independently of the cache pipeline configuration.
+
+---
+
 
 ### 10 April 2026
 
