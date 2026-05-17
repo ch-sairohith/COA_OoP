@@ -8,21 +8,21 @@
   },
   "MEMORY_LATENCY": 50,
   "L1I": {
-    "cache_size": 32768,
+    "cache_size": 256,
     "block_size": 16,
     "associativity": 4,
     "latency": 1,
     "replacement_policy": "LFU"
   },
   "L1D": {
-    "cache_size": 32768,
+    "cache_size": 256,
     "block_size": 16,
     "associativity": 4,
     "latency": 1,
     "replacement_policy": "LFU"
   },
   "L2": {
-    "cache_size": 262144,
+    "cache_size": 1024,
     "block_size": 16,
     "associativity": 8,
     "latency": 10,

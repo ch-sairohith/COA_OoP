@@ -40,6 +40,9 @@ class Simulator:
         self._mem_wb_buffer = None
         self._mem_bubbles_remaining = 0
 
+        self._mem_wb_buffer = None
+        self._mem_bubbles_remaining = 0
+
     def run(self):
         latency_lw = config["latencies"].get("lw", 1)
         latency_sw = config["latencies"].get("sw", 1)
