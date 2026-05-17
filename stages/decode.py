@@ -58,5 +58,6 @@ class DecodeStage:
         id_ex_latch.is_branch = is_branch
         id_ex_latch.mem_size = mem_size
         id_ex_latch.counter = 0  
+        id_ex_latch.needs_translation = getattr(instr, 'needs_translation', False)
         
         return target_pc, flush_if

@@ -254,4 +254,3 @@ class CacheHierarchy:
              self._actual_write_back(self.active_write[0], self.active_write[1])
              self.active_write = None
         self.memory_busy_cycles = 0
-

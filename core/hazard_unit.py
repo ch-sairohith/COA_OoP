@@ -7,6 +7,7 @@ class HazardUnit:
         self.latency_lw = config["latencies"].get("lw", 1)
         self.latency_sw = config["latencies"].get("sw", 1)
         self.latency_add = config["latencies"].get("add", 1)
+        self.latency_mul = config["latencies"].get("mul", 3)
 
     def detect(self, if_id, id_ex, ex_mem, mem_wb):
         forwardA, forwardB, forwardC, forwardD = "NONE", "NONE", "NONE", "NONE"
@@ -15,8 +16,14 @@ class HazardUnit:
         # Multi-cycle D-cache / memory latency is handled in Simulator using
         # cache-reported latency (merged with config); not driven by ex_mem.counter here.
 
-        if  not id_ex.is_nop and id_ex.alu_op == "add":
+        if not id_ex.is_nop and id_ex.alu_op == "add":
             if self.latency_add > 1 and id_ex.counter < self.latency_add - 1:
+                if not stall:
+                    stall="execute"
+                id_ex.counter += 1
+
+        if not id_ex.is_nop and id_ex.alu_op == "mul":
+            if self.latency_mul > 1 and id_ex.counter < self.latency_mul - 1:
                 if not stall:
                     stall="execute"
                 id_ex.counter += 1

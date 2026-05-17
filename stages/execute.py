@@ -18,6 +18,7 @@ class ExecuteStage:
         alu_result = 0
         
         if instr.opcode == "add": alu_result = rs1_val + rs2_val
+        elif instr.opcode == "mul": alu_result = rs1_val * rs2_val
         elif instr.opcode in ["addi", "la"]: alu_result = rs1_val + imm
         elif instr.opcode == "sub": alu_result = rs1_val - rs2_val
         elif instr.opcode == "slt": alu_result = 1 if rs1_val < rs2_val else 0
@@ -34,5 +35,6 @@ class ExecuteStage:
             mem_read=id_ex_latch.mem_read,
             mem_write=id_ex_latch.mem_write,
             reg_write=id_ex_latch.reg_write,
-            counter=0  
+            counter=0,
+            needs_translation=getattr(id_ex_latch, 'needs_translation', False)
         )

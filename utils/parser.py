@@ -69,28 +69,42 @@ def parser(input_file):
     for line in clean_lines:
         words = line.replace(",", "").split()
         current_pc = instr_index * 4
+        op = words[0].lower()
 
-        if words[0] == "add" or words[0] == "sub":
-            instr = Instruction(words[0], current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
+        if op == "add" or op == "sub":
+            instr = Instruction(op, current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
 
-        elif words[0] == "addi":
-            instr = Instruction(words[0], current_pc, int(words[1][1:]), int(words[2][1:]), imm=int(words[3]))
+        elif op == "mul":
+            instr = Instruction(op, current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
 
-        elif words[0] == "lw":
+        elif op == "l":
+            vaddr = int(words[1], 16)
+            rd = int(words[2][1:])
+            instr = Instruction("lw", current_pc, rd=rd, rs1=0, imm=vaddr, needs_translation=True)
+
+        elif op == "s":
+            vaddr = int(words[1], 16)
+            rs2 = int(words[2][1:])
+            instr = Instruction("sw", current_pc, rs1=0, rs2=rs2, imm=vaddr, needs_translation=True)
+
+        elif op == "addi":
+            instr = Instruction(op, current_pc, int(words[1][1:]), int(words[2][1:]), imm=int(words[3]))
+
+        elif op == "lw":
             rd = int(words[1][1:])
             offset, reg = words[2].split("(")
             imm = int(offset)
             rs1 = int(reg[:-1][1:])
-            instr = Instruction(words[0], current_pc, rd, rs1, imm=imm)
+            instr = Instruction(op, current_pc, rd, rs1, imm=imm)
 
-        elif words[0] == "sw":
+        elif op == "sw":
             rs2 = int(words[1][1:])
             offset, reg = words[2].split("(")
             imm = int(offset)
             rs1 = int(reg[:-1][1:])
-            instr = Instruction(words[0], current_pc, rs1=rs1, rs2=rs2, imm=imm)
+            instr = Instruction(op, current_pc, rs1=rs1, rs2=rs2, imm=imm)
 
-        elif words[0] == "beq" or words[0] == "bne":
+        elif op == "beq" or op == "bne":
             rs1 = int(words[1][1:])
             rs2 = int(words[2][1:])
             label = words[3]
@@ -98,9 +112,9 @@ def parser(input_file):
             
             # FIX: Calculate PC-relative offset instead of absolute target
             offset = target - current_pc 
-            instr = Instruction(words[0], current_pc, rs1=rs1, rs2=rs2, imm=offset)
+            instr = Instruction(op, current_pc, rs1=rs1, rs2=rs2, imm=offset)
 
-        elif words[0] == "la":
+        elif op == "la":
             rd = int(words[1][1:])
             label = words[2]
 
@@ -111,21 +125,21 @@ def parser(input_file):
             else:
                 raise Exception(f"Label '{label}' not found")                       
 
-            instr = Instruction(words[0], current_pc, rd, imm=imm)
+            instr = Instruction(op, current_pc, rd, imm=imm)
 
-        elif words[0] == "slt":
-            instr = Instruction(words[0], current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
+        elif op == "slt":
+            instr = Instruction(op, current_pc, int(words[1][1:]), int(words[2][1:]), int(words[3][1:]))
             
-        elif words[0] == "jal":
+        elif op == "jal":
             rd = int(words[1][1:])
             label = words[2]
             target = label_map[label]
             
             # FIX: Calculate PC-relative offset for jump
             offset = target - current_pc
-            instr = Instruction(words[0], current_pc, rd=rd, imm=offset)
+            instr = Instruction(op, current_pc, rd=rd, imm=offset)
 
-        elif words[0] == "j":
+        elif op == "j":
             label = words[1]
             target = label_map[label]
             

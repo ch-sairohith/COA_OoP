@@ -11,7 +11,7 @@ hazard = HazardUnit()
 isforward = config.get("forwarding_enabled", True)
 
 class Simulator:
-    def __init__(self, inst_mem, data_mem, cache_hierarchy):
+    def __init__(self, inst_mem, data_mem, cache_hierarchy, translator=None):
         self.clock = 0
         self.pc = 0
         self.cache_hierarchy = cache_hierarchy
@@ -35,6 +35,10 @@ class Simulator:
         self.execute_stage = ExecuteStage()
         self.mem_stage = MemStage()
         self.writeback_stage = WritebackStage()
+        self.translator = translator
+
+        self._mem_wb_buffer = None
+        self._mem_bubbles_remaining = 0
 
         self._mem_wb_buffer = None
         self._mem_bubbles_remaining = 0
@@ -101,7 +105,7 @@ class Simulator:
                     self.mem_wb_latch = MEM_WB_Latch(is_nop=True)
             else:
                 raw_wb, cache_lat = self.mem_stage.step(
-                    self.ex_mem_latch, stall=False, cache_hierarchy=self.cache_hierarchy
+                    self.ex_mem_latch, stall=False, cache_hierarchy=self.cache_hierarchy, translator=self.translator
                 )
                 if (
                     not self.ex_mem_latch.is_nop
