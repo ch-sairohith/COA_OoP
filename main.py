@@ -5,7 +5,7 @@ from core.simulator import Simulator
 from utils.parser import parser
 from components.data_mem import Memory
 from components.Instruction_mem import InstructionMemory
-from components.cache_hierarchy import CacheHierarchy
+from components.cache_system.cache_hierarchy import CacheHierarchy
 from vm.address_translator import AddressTranslator
 
 with open("config.json", "r") as f:
