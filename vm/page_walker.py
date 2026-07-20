@@ -31,11 +31,12 @@ class PageWalker:
 
     Return value of walk()
     ----------------------
-    Always returns a 3-tuple: (pfn, penalty_cycles, evicted_vpn)
-    - pfn          : the physical frame number for this VPN
-    - penalty      : cycles charged (walk only, or walk + fault)
-    - evicted_vpn  : the VPN that was kicked out of RAM (None if no eviction)
-                     AddressTranslator uses this to invalidate the TLB entry.
+    Always returns a 5-tuple: (pfn, penalty, evicted_vpn, was_dirty_in_pt, was_fault)
+    - pfn             : the physical frame number for this VPN
+    - penalty         : cycles charged (walk only, or walk + fault)
+    - evicted_vpn     : the VPN that was kicked out of RAM (None if no eviction)
+    - was_dirty_in_pt : True if the evicted page was dirty in the Page Table
+    - was_fault       : True if the page was missing from RAM (Page Fault)
     """
 
     def __init__(self, page_table: PageTable, frame_allocator: FrameAllocator,
@@ -55,7 +56,7 @@ class PageWalker:
 
         Called by AddressTranslator on every TLB miss.
 
-        Returns: (pfn, penalty_cycles, evicted_vpn)
+        Returns: (pfn, penalty, evicted_vpn, was_dirty_in_pt, was_fault)
         """
         self.page_walks += 1
         penalty      = self.walk_latency
@@ -65,9 +66,8 @@ class PageWalker:
         entry = self.page_table.lookup(vpn)
 
         if entry is not None:
-            # Page table HIT — the page is in RAM, just not in TLB
-            # No eviction needed, just return the existing PFN
-            return entry.pfn, penalty, None
+            # Page table HIT - the page is in RAM, just not in TLB
+            return entry.pfn, penalty, None, False, False
 
         # ---- Step 2: Page Fault — page not in RAM ----
         self.page_faults += 1
@@ -75,14 +75,15 @@ class PageWalker:
 
         # Ask FrameAllocator for a physical frame
         # It may need to evict another page if RAM is full
-        frame_id, evicted_vpn, was_dirty = self.frame_allocator.allocate(vpn)
+        frame_id, evicted_vpn = self.frame_allocator.allocate(vpn)
 
+        was_dirty_in_pt = False
         if evicted_vpn is not None:
             # A page was kicked out to make room
             # Remove its page table entry (AddressTranslator will handle TLB)
-            self.page_table.evict(evicted_vpn)
+            was_dirty_in_pt = self.page_table.evict(evicted_vpn)
 
         # Create the new page table entry for our VPN
         self.page_table.insert(vpn, frame_id)
 
-        return frame_id, penalty, evicted_vpn
+        return frame_id, penalty, evicted_vpn, was_dirty_in_pt, True

@@ -2,20 +2,20 @@ class DecodeStage:
     def __init__(self, register_file):
         self.register_file = register_file
 
-    def step(self, if_id_latch, id_ex_latch, ex_mem_latch, mem_wb_latch, forwardA, forwardB, stall: bool):
-        if stall or if_id_latch.is_nop:
+    def step(self, if_id_latch, id_ex_latch, ex_mem_latch, mem_wb_latch, fwd_branch_rs1, fwd_branch_rs2, stall_signal: bool):
+        if stall_signal or if_id_latch.is_nop:
             id_ex_latch.is_nop = True
             return None, False
 
         instr = if_id_latch.instruction
         pc = if_id_latch.pc
 
-        if forwardA=="ex_mem": rs1_val=ex_mem_latch.alu_result
-        elif forwardA=="mem_wb": rs1_val=mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
+        if fwd_branch_rs1=="ex_mem": rs1_val=ex_mem_latch.alu_result
+        elif fwd_branch_rs1=="mem_wb": rs1_val=mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
         else: rs1_val = self.register_file.read(instr.rs1) if instr.rs1 is not None else 0
 
-        if forwardB=="ex_mem": rs2_val=ex_mem_latch.alu_result
-        elif forwardB=="mem_wb": rs2_val=mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
+        if fwd_branch_rs2=="ex_mem": rs2_val=ex_mem_latch.alu_result
+        elif fwd_branch_rs2=="mem_wb": rs2_val=mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
         else: rs2_val = self.register_file.read(instr.rs2) if instr.rs2 is not None else 0
 
         reg_write, mem_read, mem_write, mem_to_reg, is_branch = False, False, False, False, False
@@ -23,7 +23,7 @@ class DecodeStage:
         target_pc = None
         flush_if = False
 
-        if instr.opcode in ["add", "sub", "addi", "la", "slt"]:
+        if instr.opcode in ["add", "sub", "addi", "la", "slt", "mul"]:
             reg_write = True
         elif instr.opcode == "lw":
             mem_read, reg_write, mem_to_reg, mem_size = True, True, True, 4

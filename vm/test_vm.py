@@ -101,7 +101,8 @@ def test_dirty_tracking():
 
     t.translate(0x3000, is_write=True)   # VPN = 3, store
 
-    check(t.page_table.is_dirty(3), "page table marks VPN 3 dirty")
+    # Write-Back TLB: The Page Table should NOT be dirty yet!
+    check(not t.page_table.is_dirty(3), "page table is NOT dirty (delayed write-back)")
     # TLB should also have dirty set
     entry = next((e for e in t.tlb.entries if e.vpn == 3), None)
     check(entry is not None and entry.dirty, "TLB entry for VPN 3 is dirty")
@@ -140,18 +141,7 @@ def test_dirty_eviction():
     check(t.dirty_evictions >= 1,  f"at least 1 dirty eviction (got {t.dirty_evictions})")
 
 
-# ── Test 7: FIFO policy ───────────────────────────────────────────────────────
-def test_fifo_policy():
-    print("\nTest 7: FIFO replacement — oldest page is evicted first")
-    t = make_translator(num_frames=2, tlb_entries=4, policy="fifo")
 
-    t.translate(0x0000)  # VPN 0 — loaded first (oldest)
-    t.translate(0x1000)  # VPN 1 — loaded second
-    t.translate(0x0000)  # re-access VPN 0 — FIFO should not update order
-
-    # 3rd unique page -> should evict VPN 0 (oldest in FIFO, even though recently used)
-    t.translate(0x2000)
-    check(t.page_evictions == 1, f"1 eviction with FIFO (got {t.page_evictions})")
 
 
 # ── Test 8: Data survives eviction and is restored on re-access ───────────────
@@ -216,6 +206,6 @@ if __name__ == "__main__":
     test_dirty_tracking()
     test_frame_eviction()
     test_dirty_eviction()
-    test_fifo_policy()
+
     test_swap_restore()
     print("\nDone.")

@@ -68,6 +68,6 @@ class Memory:
         if self.base_address >= self.size:
             raise Exception("Memory out of bounds")
         
-        self.mem[self.base_address]=val
+        self.mem[self.base_address]=val & 255
         self.base_address+=1         
         

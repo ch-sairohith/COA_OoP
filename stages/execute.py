@@ -1,16 +1,16 @@
 from core.latches import EX_MEM_Latch
 
 class ExecuteStage:
-    def step(self, id_ex_latch, old_ex_mem_latch, mem_wb_latch, forwardA, forwardB, stall):
-        if stall or id_ex_latch.is_nop:
+    def step(self, id_ex_latch, old_ex_mem_latch, mem_wb_latch, fwd_alu_rs1, fwd_alu_rs2, stall_signal):
+        if stall_signal or id_ex_latch.is_nop:
             return EX_MEM_Latch(is_nop=True)
 
-        if forwardA == "ex_mem": rs1_val = old_ex_mem_latch.alu_result
-        elif forwardA == "mem_wb": rs1_val = mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
+        if fwd_alu_rs1 == "ex_mem": rs1_val = old_ex_mem_latch.alu_result
+        elif fwd_alu_rs1 == "mem_wb": rs1_val = mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
         else: rs1_val = id_ex_latch.rs1_val
 
-        if forwardB == "ex_mem": rs2_val = old_ex_mem_latch.alu_result
-        elif forwardB == "mem_wb": rs2_val = mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
+        if fwd_alu_rs2 == "ex_mem": rs2_val = old_ex_mem_latch.alu_result
+        elif fwd_alu_rs2 == "mem_wb": rs2_val = mem_wb_latch.mem_data if mem_wb_latch.mem_to_reg else mem_wb_latch.alu_result
         else: rs2_val = id_ex_latch.rs2_val
 
         instr = id_ex_latch.instruction

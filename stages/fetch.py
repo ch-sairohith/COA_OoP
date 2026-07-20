@@ -21,33 +21,36 @@ class FetchStage:
         self._pending_if_cycles = 0
         self._buffer_instr = None
 
-    def step(self, current_pc: int, if_id_latch, stall: bool):
+    def step(self, current_pc: int, if_id_latch, stall_signal: bool):
         """
         Executes one clock cycle of the Fetch stage.
         Returns (next_pc, reported_latency_for_last_completed_access).
-        When stall is True (hazard freeze), IF pending state does not advance.
         """
-        if stall:
-            return current_pc, 0
-
+        # 1. Background Memory Hardware (Always ticks, regardless of CPU stalls)
         if self._pending_if_cycles > 0:
             self._pending_if_cycles -= 1
+
+        # 2. CPU Pipeline Stall (Hazard Freeze)
+        if stall_signal:
+            return current_pc, 0
+
+        # 3. Memory Delivery (Pushing the buffered instruction if download finished)
+        if self._buffer_instr is not None:
             if self._pending_if_cycles == 0:
                 if_id_latch.is_nop = False
                 if_id_latch.instruction = self._buffer_instr
                 if_id_latch.pc = self._buffer_pc
                 self._buffer_instr = None
                 return current_pc + 4, 0
-            if_id_latch.is_nop = True
-            if_id_latch.instruction = None
-            return current_pc, 0
+            else:
+                if_id_latch.is_nop = True
+                if_id_latch.instruction = None
+                return current_pc, 0
 
+        # 4. Fetch New Instruction
         instr, latency = self.cache_hierarchy.fetch(current_pc)
-        # Unified L2 may alias I- and D-lines; recover architectural instruction if needed.
-        if instr is not None and not isinstance(instr, Instruction):
-            instr = self.inst_mem.read(current_pc)
-
-        if instr is None:
+        
+        if instr is None or isinstance(instr, int):
             if_id_latch.is_nop = True
             if_id_latch.instruction = None
             return current_pc + 4, latency

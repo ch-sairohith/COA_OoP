@@ -51,7 +51,6 @@ class AddressTranslator:
         virt_size  = config.getint("memory", "virtual_size_bytes")
         phys_size  = config.getint("memory", "physical_size_bytes")
         num_frames = phys_size // page_size
-        policy     = config.get("vm", "replacement_policy").lower()
 
         tlb_entries = config.getint("vm", "dtlb_entries")
         tlb_hit_lat = config.getint("vm", "tlb_hit_latency")
@@ -67,13 +66,9 @@ class AddressTranslator:
         self.offset_mask = page_size - 1
 
         # ── Build all sub-components ───────────────────────────────────
-        self.tlb = TLB(
-            num_entries        = tlb_entries,
-            hit_latency        = tlb_hit_lat,
-            replacement_policy = policy
-        )
+        self.tlb = TLB(tlb_entries,tlb_hit_lat)
         self.page_table = PageTable(virt_size, page_size)
-        self.frame_allocator = FrameAllocator(num_frames, policy)
+        self.frame_allocator = FrameAllocator(num_frames)
         self.page_walker = PageWalker(
             page_table      = self.page_table,
             frame_allocator = self.frame_allocator,
@@ -118,29 +113,28 @@ class AddressTranslator:
 
         if pfn is not None:
             # ── TLB HIT: translation found in TLB ────────────────────
-            # Update LRU order in FrameAllocator so this frame stays "recent"
-            frame_id = self.frame_allocator.get_frame_for_vpn(vpn)
-            if frame_id is not None:
-                self.frame_allocator.mark_accessed(frame_id)
+            # Update LRU order in FrameAllocator so this frame stays "recent".
+            # The physical frame number (PFN) is literally the frame_id!
+            self.frame_allocator.mark_accessed(pfn)
 
         else:
             # ── TLB MISS: must walk the page table ───────────────────
-            pfn, walk_penalty, evicted_vpn = self.page_walker.walk(vpn)
+            pfn, walk_penalty, evicted_vpn, was_dirty_in_pt, was_fault = self.page_walker.walk(vpn)
             penalty += walk_penalty
-
-            # page_walker.walk() returns evicted_vpn != None ONLY when
-            # a page fault occurred AND a frame had to be evicted.
-            # If it was just a page table hit (no fault), evicted_vpn = None.
-
-            # was_fault = True means walk() had to allocate a new frame
-            # (i.e. vpn was not in the page table — a page fault happened)
-            was_fault = (walk_penalty > self.page_walker.walk_latency)
 
             if was_fault and self.data_mem is not None:
                 # Step 3a: Save evicted frame's bytes to swap (before reuse)
                 if evicted_vpn is not None:
-                    self._save_frame_to_swap(evicted_vpn, pfn)
-                    self.tlb.invalidate(evicted_vpn)
+                    # Flush TLB dirty state before evicting from RAM
+                    was_tlb_dirty = self.tlb.invalidate(evicted_vpn)
+                    
+                    # Page is dirty if either TLB or PageTable had the dirty bit set
+                    is_really_dirty = was_dirty_in_pt or was_tlb_dirty
+                        
+                    # Only save to swap if the page was dirty (Write-Back)
+                    if is_really_dirty:
+                        self._save_frame_to_swap(evicted_vpn, pfn)
+                        self.frame_allocator.dirty_evictions += 1
 
                 # Step 3b: Prepare the new frame for vpn
                 #   - if vpn was previously evicted: restore from swap
@@ -149,11 +143,20 @@ class AddressTranslator:
 
             elif evicted_vpn is not None:
                 # No data_mem provided (stats-only mode):
-                # Still need to invalidate the stale TLB entry
-                self.tlb.invalidate(evicted_vpn)
+                was_tlb_dirty = self.tlb.invalidate(evicted_vpn)
+                is_really_dirty = was_dirty_in_pt or was_tlb_dirty
+                
+                if is_really_dirty:
+                    self.page_table.set_dirty(evicted_vpn)
+                    self.frame_allocator.dirty_evictions += 1
 
             # Step 4: Cache the new translation in TLB
-            self.tlb.insert(vpn, pfn)
+            evicted_tlb_info = self.tlb.insert(vpn, pfn)
+            if evicted_tlb_info is not None:
+                evicted_tlb_vpn, was_tlb_dirty = evicted_tlb_info
+                if was_tlb_dirty:
+                    # TLB Write-Back: Flush dirty state to RAM structures
+                    self.page_table.set_dirty(evicted_tlb_vpn)
 
         # Step 5: Mark dirty on store instructions
         if is_write:
@@ -199,16 +202,11 @@ class AddressTranslator:
 
     def _mark_dirty(self, vpn: int):
         """
-        Mark a page as dirty in all three places that track it:
-        1. PageTable  - authoritative source of truth
-        2. TLB entry  - so TLB-level checks also see the dirty bit
-        3. Frame      - so FrameAllocator counts dirty evictions correctly
+        Mark a page as dirty ONLY in the TLB (Hardware Write-Back).
+        The actual Page Table and Frame Allocator will only be updated
+        when this TLB entry gets evicted, saving massive RAM accesses!
         """
-        self.page_table.set_dirty(vpn)
         self.tlb.set_dirty(vpn)
-        frame_id = self.frame_allocator.get_frame_for_vpn(vpn)
-        if frame_id is not None:
-            self.frame_allocator.mark_dirty(frame_id)
 
     # ──────────────────────────────────────────────────────────────────
     # Stats (Person B reads these for the final report)

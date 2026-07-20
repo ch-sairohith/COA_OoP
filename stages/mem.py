@@ -35,42 +35,43 @@ class MemStage:
         if stall or ex_mem_latch.is_nop:
             return MEM_WB_Latch(is_nop=True), 0
             
-        mem_data = 0
-        latency = 0
-        vm_latency = 0
-        paddr = ex_mem_latch.alu_result
-
-        if getattr(ex_mem_latch, 'needs_translation', False) and translator is not None:
-            paddr, vm_latency = translator.translate(ex_mem_latch.alu_result, is_write=ex_mem_latch.mem_write)
+        paddr, vm_latency = self._translate_address(ex_mem_latch, translator)
         
+        mem_data, latency = 0, 0
         if ex_mem_latch.mem_read:
-            # 1. Forwarding from Store Buffer
-            forwarded = False
-            for st in reversed(self.store_buffer):
-                if st["address"] == paddr and st["size"] == ex_mem_latch.mem_size:
-                    mem_data = st["value"]
-                    latency = 1 # fast cache hit / store-to-load forwarding
-                    forwarded = True
-                    break
-            if not forwarded:
-                if ex_mem_latch.mem_size == 1:
-                    mem_data, latency = cache_hierarchy.load_byte(paddr)
-                elif ex_mem_latch.mem_size == 4:
-                    mem_data, latency = cache_hierarchy.load_word(paddr)
+            mem_data, latency = self._handle_load(paddr, ex_mem_latch.mem_size, cache_hierarchy)
         elif ex_mem_latch.mem_write:
-            # Mask cache latency, pipeline only sees 1 cycle latency
-            latency = 1
-            self.store_buffer.append({
-                "address": paddr,
-                "value": ex_mem_latch.rs2_val,
-                "size": ex_mem_latch.mem_size
-            })
+            latency = self._handle_store(paddr, ex_mem_latch.rs2_val, ex_mem_latch.mem_size)
             
+        return self._create_output_latch(ex_mem_latch, mem_data), latency + vm_latency
+
+    def _translate_address(self, latch, translator):
+        if getattr(latch, 'needs_translation', False) and translator is not None:
+            return translator.translate(latch.alu_result, is_write=latch.mem_write)
+        return latch.alu_result, 0
+
+    def _handle_load(self, paddr, size, cache_hierarchy):
+        # 1. Check for Store-to-Load Forwarding (Cache bypass)
+        for st in reversed(self.store_buffer):
+            if st["address"] == paddr and st["size"] == size:
+                return st["value"], 1 # Fast 1-cycle hit
+
+        # 2. Fetch from Cache Hierarchy
+        if size == 1:
+            return cache_hierarchy.load_byte(paddr)
+        return cache_hierarchy.load_word(paddr)
+
+    def _handle_store(self, paddr, value, size):
+        # Mask cache latency, pipeline only sees 1-cycle latency
+        self.store_buffer.append({"address": paddr, "value": value, "size": size})
+        return 1
+
+    def _create_output_latch(self, in_latch, mem_data):
         return MEM_WB_Latch(
             is_nop=False,
-            alu_result=ex_mem_latch.alu_result,
+            alu_result=in_latch.alu_result,
             mem_data=mem_data,
-            rd_addr=ex_mem_latch.rd_addr,
-            reg_write=ex_mem_latch.reg_write,
-            mem_to_reg=ex_mem_latch.mem_read
-        ), latency + vm_latency
+            rd_addr=in_latch.rd_addr,
+            reg_write=in_latch.reg_write,
+            mem_to_reg=in_latch.mem_read
+        )

@@ -26,7 +26,7 @@ class PageTable:
     -------
     lookup(vpn)      -> PTEntry | None   (None = page fault)
     insert(vpn, pfn) -> None             (called after page fault)
-    set_dirty(vpn)   -> None             (called on store instruction)
+    set_dirty(vpn)   -> None             (called when a dirty TLB entry is evicted)
     evict(vpn)       -> bool             (True if page was dirty)
     is_dirty(vpn)    -> bool
     """
@@ -55,8 +55,9 @@ class PageTable:
 
     def set_dirty(self, vpn: int):
         """
-        Mark a page dirty (it has been written to by a store instruction).
-        A dirty page must be written back to swap before its frame is reused.
+        Mark a page dirty.
+        In our True Hardware Write-Back architecture, this is called by the 
+        AddressTranslator when a dirty TLB entry is evicted, NOT on every store!
         """
         entry = self.table.get(vpn)
         if entry:
